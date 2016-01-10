@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Animation</title>
+    <script type="text/javascript" src="../doc/asset/js/esl/esl.js"></script>
+    <style>
+        body{
+            margin: 0;
+            padding:0;
+            overflow:hidden;
+        }
+        #modify{
+            position:absolute;
+            left:0;
+            top:0;
+        }
+        #add{
+            position:absolute;
+            left:50px;
+            top:0; 
+        }
+        #clear{
+            position:absolute;
+            left:100px;
+            top:0; 
+        }
+    </style>
+</head>
+<body>
+    <script type="text/javascript">
+    require.config({
+        packages: [
+            {
+                name: 'zrender',
+                location: '../src',
+                main: 'zrender'
+            }
+        ]
+    });
+    require(
+        [
+            "zrender",
+            "zrender/animation/animation",
+            'zrender/shape/Circle',
+            'zrender/shape/Rectangle',
+            'zrender/tool/event',
+            'zrender/Group',
+            'zrender/shape/Line',
+            'zrender/shape/Base',
+            'zrender/shape/Path',
+            'zrender/tool/util'
+        ], 
+        function(zrender, Animation, CircleShape,RectangleShape,ev,Group,Line,Base,PathShape){
+
+            // 初始化zrender  
+            
+            var oMain = document.getElementById('Main');
+            var oModify = document.getElementById('modify');
+            var oAdd = document.getElementById('add');
+            var oClear = document.getElementById('clear');
+            oMain.style.width = document.documentElement.clientWidth+'px';
+            oMain.style.height = document.documentElement.clientHeight+'px';
+            var zr = zrender.init(oMain);//初始化化
+            var zrUtil = require('zrender/tool/util');
+            var aRect = [];
+            var aLine = [];
+            var gRoundRect = new Group(); 
+            var disX = 0,disY = 0;
+            var bOk = false;
+            //点击创建
+            oAdd.onclick=function(){
+                aRect.push(drawRect());
+                gRoundRect.addChild(new RectangleShape(aRect[aRect.length-1]));
+                gRoundRect.childAt(aRect.length-1).style.num = aRect.length-1;
+                zr.addShape(gRoundRect);
+                dragRound();
+            };
+            //点击修改
+            oModify.onclick=function(){
+                bOk = !bOk;
+            };
+            //每个圆角矩形附加拖拽框
+            var gLine = new Group();
+            function dragRound(){
+                 gRoundRect.eachChild(function(p){
+                    p.onmousedown = function(e){
+                        if(bOk){
+                            disX = ev.getX(e.event);
+                            disY = ev.getY(e.event)
+                            _zrConnect(e); 
+                            _linemousemove();
+                            _linemouseup(p);
+                            return;
+                        }
+                        disX = ev.getX(e.event)-p.style.x;
+                        disY = ev.getY(e.event)-p.style.y;
+                        var aFrame = Frame(p);
+                        _zrmousemove(aFrame);
+                        _zrmouseup(aFrame,p,e);
+                    };      
+                });
+            };
+            function _zrchangeXY(e,f){
+                var down = e.target.style.down;
+                var up = e.target.style.up;
+                if(down){
+                  for(var i = 0;i<down.length;i++){
+                     if(down[i].oC){
+                        _lineMove1(f,down[i]);
+                     }
+                  }
+                }
+                if(up){
+                  for(var i = 0;i<up.length;i++){
+                     if(!up[i].oC){
+                        _lineMove2(f,up[i]);
+                     }
+                  }
+                }
+            };
+            function _lineMove1(f,down){
+                zr.animate(down.oB.id,'style',false)
+                .when(300,{
+                    xStart : f.style.x+f.style.width/2,
+                    yStart : f.style.y+f.style.height/2 
+                })
+                .start();
+            };
+            function _lineMove2(f,up){
+                zr.animate(up.oB.id,'style',false)
+                .when(300,{
+                    xEnd : f.style.x+f.style.width/2,
+                    yEnd : f.style.y+f.style.height/2 
+                })
+                .start();
+            };
+            function _zrConnect(e){
+                gLine.addChild(new Line(drawLine()));
+                _zrPoint(e);
+                zr.addShape(gLine);
+            }
+            
+            function _zrPoint(e){
+                gLine.childAt(0).zlevel = 3;
+                gLine.childAt(0).style.xStart = ev.getX(e.event);
+                gLine.childAt(0).style.yStart = ev.getY(e.event);
+                gLine.childAt(0).style.xEnd = ev.getX(e.event);
+                gLine.childAt(0).style.yEnd = ev.getY(e.event);
+            };
+            var aLineGroup = new Group();
+            function _linemouseup(p){
+                zr.on('mouseup',function(e){
+                    zr.un('mouseup');
+                    zr.un('mousemove');
+                    zr.delGroup(gLine);
+                    if(e.target){
+                        Deposit(p,e);
+                        createLine(p,e);
+                        createArrow(p,e);        
+                    }
+                });
+            };
+            var aArrow = [];
+            var arrowGroup = new Group();
+            function createArrow(p,e){
+                var x1 = ev.getX(e.event),y1 =ev.getY(e.event); 
+                var oClient = oCel(p.style, e.target.style);
+                var ang = a2d(Math.atan2((oClient.yStart-oClient.yEnd),(oClient.xEnd-oClient.xStart)));
+                aArrow.push(drawArrow());             
+                arrowGroup.addChild(new PathShape(drawArrow()));
+                zr.addShape(arrowGroup);
+                e.target.style.arr.push({o1:arrowGroup.childAt(aArrow.length-1),o2:p});
+                p.style.arr2.push({o1:arrowGroup.childAt(aArrow.length-1),o2:e.target});
+                zr.animate(arrowGroup.childAt(aArrow.length-1),'',false).when(1,{
+                   position : [oClient.xEnd,oClient.yEnd
+                   ],
+                   rotation : [d2a(ang),0,0]
+                })
+                .start();
+            };
+            function Deposit(p,e){
+                aLine.push(drawLine());
+                aLineGroup.addChild(new Line(aLine[aLine.length-1]));
+                p.style.down.push({oB : aLineGroup.childAt(aLine.length-1),oC : true});
+                e.target.style.up.push({oB : aLineGroup.childAt(aLine.length-1),oC : false});
+            };
+            function createLine(p,e){
+                    var lastChild = aLineGroup.childAt(aLine.length-1);
+                    lastChild.style.xStart = p.style.x+p.style.width/2;
+                    lastChild.style.yStart = p.style.y+p.style.height/2;
+                    lastChild.style.xEnd = e.target.style.x+e.target.style.width/2;
+                    lastChild.style.yEnd = e.target.style.y+e.target.style.height/2;
+                    zr.addShape(aLineGroup);  
+            };
+            function _linemousemove(){
+                zr.on('mousemove',function(e){
+                    gLine.childAt(0).style.xEnd = ev.getX(e.event);
+                    gLine.childAt(0).style.yEnd = ev.getY(e.event);
+                    zr.modShape(gLine.childAt(0).id,gLine.childAt(0));
+                    _zrArrowMove(e);
+                });
+            };
+            function _zrArrowMove(e){
+                var x1 = ev.getX(e.event),y1 =ev.getY(e.event); 
+                var ang = a2d(Math.atan2((disY-y1),(x1-disX)));
+                gLine.addChild(new PathShape(drawArrow()));
+                zr.animate(gLine.childAt(1).id,'',false)
+                .when(1,{
+                   position : [x1,y1],
+                   rotation : [d2a(ang),0,0]
+                })
+                .start();
+            };
+            function _zrmouseup(f,p,e1){
+                zr.on('mouseup',function(e){
+                    zr.un('mouseup');
+                    zr.un('mousemove');
+                    _zranimation(p,f);
+                    zr.delShape(f);
+                    _zrchangeXY(e1,f);
+                    _zrchangArrowXY(e1,f);
+                });
+            };
+            function _zrchangArrowXY(e1,f){
+                var oA = e1.target.style.arr;
+                var oA2 = e1.target.style.arr2;
+                if(oA2[0]){
+                    for(var i = 0;i<oA2.length;i++){
+                        var oClient = oCel(oA2[i].o2.style, f.style);
+                        var ang = a2d(Math.atan2((oClient.yEnd-oClient.yStart),(oClient.xStart-oClient.xEnd)));
+                        zr.animate(oA2[i].o1,'',false).when(300,{
+                           position : [oClient.xStart,oClient.yStart
+                           ],
+                           rotation : [d2a(ang),0,0]
+                        })
+                        .start();
+                    }
+                }
+                if(oA[0]){ 
+                    for(var i = 0;i<oA.length;i++){
+                        var oClient = oCel(oA[i].o2.style, f.style);
+                        var ang = a2d(Math.atan2((oClient.yStart-oClient.yEnd),(oClient.xEnd-oClient.xStart)));
+                        zr.animate(oA[i].o1,'',false).when(300,{
+                           position : [oClient.xEnd,oClient.yEnd
+                           ],
+                           rotation : [d2a(ang),0,0]
+                        })
+                        .start();
+                    }
+                    
+                }
+            };
+            function _zranimation(p,f){
+                zr.animate(p.id,'style',false)
+                .when(300,{
+                    x : f.style.x,
+                    y : f.style.y 
+                })
+                .start();
+            };
+            function Frame(p){
+                var aFrame = new RectangleShape(drawRect());
+                zr.addShape(aFrame);
+                aFrame.style.brushType = 'stroke';
+                aFrame.style.strokeColor = 'blue';
+                aFrame.style.x = p.style.x;
+                aFrame.style.y = p.style.y;
+                return aFrame;
+            };
+            function _zrmousemove(f){
+                zr.on('mousemove',function(e){
+                   f.style.x  = ev.getX(e.event)-disX;
+                   f.style.y  = ev.getY(e.event)-disY;
+                   zr.modShape(f.id,f);
+                });
+            };
+            //画线
+            function drawLine(){
+                var Line = {
+                    zlevel : 1,
+                    style: {
+                        xStart: 0,
+                        yStart: 0,
+                        xEnd: 0,
+                        yEnd: 0,
+                        strokeColor: '#000',
+                        lineWidth : 4,
+                        strokeColor : 'blue'
+                    },
+                    hoverable : false
+                };
+                return Line;
+            };
+            //画箭头
+            function drawArrow(){
+                var Arrow = {
+                    zlevel : 2,
+                    style : {
+                        path : 'M-8,0, L-12,-10, L8,0 L-12,10 z',
+                        x : 0,
+                        y : 0,
+                        brushType : 'fill',
+                        color : 'blue',
+                        strokeColor : 'blue',
+                        lineWidth : 10,
+                        text : 'path',
+                        textPosition : 'bottom'
+                    },
+                    hoverable :false, 
+                    draggable : false
+                };
+                return Arrow;
+            };
+            //画圆角矩形
+            function drawRect(){
+                var Rect = {
+                    zlevel : 2,
+                    hoverable: false,
+                    draggable: false,
+                    style : {
+                        x : 0,
+                        y : 0,
+                        width : 150,
+                        height: 250,
+                        radius: [10, 10,10,10],
+                        brushType : 'both',
+                        color : 'green',
+                        strokeColor :'red',
+                        lineWidth : 4,
+                        lineJoin : 'round',
+                        num : 0,
+                        down : [],
+                        up : [],
+                        arr : [],
+                        arr2 : []
+                    },
+                    highlightStyle : {
+                        strokeColor : 'blue',
+                        lineWidth : 4
+                    }
+                }
+                return Rect;
+            }
+            function d2a(d){
+                return d*Math.PI/180;
+            }
+            function a2d(a){
+                return a*180/Math.PI;
+            };
+            function oCel(fPanel, tPanel){
+                var fPanelX = fPanel.x,
+                    fPanelY = fPanel.y,
+                    fPanelX1 = fPanel.x + fPanel.width,
+                    fPanelY1 = fPanel.y + fPanel.height,
+                    fCenterX = fPanel.x + (fPanel.width/2),
+                    fCenterY = fPanel.y + (fPanel.height/2),
+                    //fpanel两条对角线的斜率
+                    fk1 = (fPanelY-fPanelY1)/(fPanelX-fPanelX1),
+                    fk2 = -fk1;
+
+                var tPanelX = tPanel.x,
+                    tPanelY = tPanel.y,
+                    tPanelX1 = tPanel.x + tPanel.width,
+                    tPanelY1 = tPanel.y + tPanel.height,
+                    tCenterX = tPanel.x + (tPanel.width/2),
+                    tCenterY = tPanel.y + (tPanel.height/2),
+                    //tpanel两条对角线的斜率
+                    tk1 = (tPanelY-tPanelY1)/(tPanelX-tPanelX1),
+                    tk2 = -tk1;
+
+                var xStart, yStart, xEnd, yEnd;
+
+
+                //k为两矩形中心点连线的斜率
+                var k = (fCenterY-tCenterY)/(fCenterX-tCenterX),
+                    y;
+
+                if(k == Infinity){
+                    //箭头垂直向上
+                    xStart = fCenterX;
+                    yStart = fPanelY;
+                    xEnd = tCenterX;
+                    yEnd = tPanelY1;
+                }else if(k == -Infinity){
+                    //箭头垂直向下
+                    xStart = fCenterX;
+                    yStart = fPanelY1;
+                    xEnd = tCenterX;
+                    yEnd = tPanelY;
+                }else{
+                    //计算连线起点，也就是两个中心连线与fpanel边框交点
+                    if(k > fk2 && k < fk1){
+                        //交点在左右边
+                        xStart = fCenterX > tCenterX ? fPanelX : fPanelX1;
+                        yStart = k*(xStart-tCenterX)+tCenterY;
+                    }else{
+                        //交点在上下边
+                        yStart = fCenterY > tCenterY ? fPanelY : fPanelY1;
+                        xStart = (yStart-tCenterY)/k + tCenterX;
+                    }
+
+                    //计算连线起点，也就是计算两个中心连线与tpanel边框交点
+                    if(k > tk2 && k < tk1){
+                        //交点在左右边
+                        xEnd = fCenterX < tCenterX ? tPanelX : tPanelX1;
+                        yEnd = k*(xEnd-tCenterX)+tCenterY;
+                    }else{
+                        //交点在上下边
+                        yEnd = fCenterY < tCenterY ? tPanelY : tPanelY1;
+                        xEnd = (yEnd-tCenterY)/k + tCenterX;
+                    }
+                }
+                return {
+                    xStart: xStart,
+                    yStart: yStart,
+                    xEnd: xEnd,
+                    yEnd: yEnd
+                };
+            }
+        })
+    </script>
+    <div id="Main" style="width:600px;height:400px;"></div>
+    <input id="modify" type="button" value="修改" />
+    <input id="add" type="button" value="添加" />
+    <input id="clear" type="button" value="刷新" />
+</body>
+</html>
